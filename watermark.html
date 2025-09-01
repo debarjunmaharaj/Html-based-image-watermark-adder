@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Watermark setup</title>
+    <style>
+        /* --- Basic Styling --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 700px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1c1e21;
+            margin-top: 0;
+            margin-bottom: 25px;
+        }
+        
+        p {
+            text-align: center;
+            color: #606770;
+            margin-bottom: 30px;
+        }
+
+        /* --- Controls Section --- */
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #4b4f56;
+        }
+
+        input[type="file"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            background-color: #f5f6f7;
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin-top: 5px;
+        }
+        
+        .opacity-display {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #opacityValue {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        /* --- Canvas & Download Link --- */
+        #canvas-container {
+            margin-top: 20px;
+            border: 2px dashed #ccd0d5;
+            border-radius: 8px;
+            padding: 10px;
+            min-height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f7f8fa;
+        }
+        
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+
+        #downloadLink {
+            display: none; /* Hidden by default */
+            width: 100%;
+            text-align: center;
+            background-color: #28a745;
+            color: white;
+            padding: 15px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            text-decoration: none;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: background-color 0.2s;
+        }
+
+        #downloadLink:hover {
+            background-color: #218838;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Image Watermark Adder</h1>
+        <p>Upload your image and a watermark, then adjust the position and opacity.</p>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="imageLoader">1. Upload Main Image</label>
+                <input type="file" id="imageLoader" accept="image/*">
+            </div>
+            <div class="control-group">
+                <label for="watermarkLoader">2. Upload Watermark Image</label>
+                <input type="file" id="watermarkLoader" accept="image/*">
+            </div>
+            <div class="control-group">
+                <label for="positionSelector">3. Watermark Position</label>
+                <select id="positionSelector">
+                    <option value="center">Center</option>
+                    <option value="top-left">Top Left</option>
+                    <option value="top-center">Top Center</option>
+                    <option value="top-right">Top Right</option>
+                    <option value="middle-left">Middle Left</option>
+                    <option value="middle-right">Middle Right</option>
+                    <option value="bottom-left">Bottom Left</option>
+                    <option value="bottom-center">Bottom Center</option>
+                    <option value="bottom-right" selected>Bottom Right</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <div class="opacity-display">
+                    <label for="opacitySlider">4. Watermark Opacity</label>
+                    <span id="opacityValue">0.5</span>
+                </div>
+                <input type="range" id="opacitySlider" min="0" max="1" step="0.05" value="0.5">
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <a id="downloadLink" download="watermarked-image.png">Download Image</a>
+    </div>
+
+    <script>
+        // Get DOM elements
+        const imageLoader = document.getElementById('imageLoader');
+        const watermarkLoader = document.getElementById('watermarkLoader');
+        const positionSelector = document.getElementById('positionSelector');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const opacityValue = document.getElementById('opacityValue');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // Store loaded images
+        let mainImage = null;
+        let watermarkImage = null;
+
+        // --- EVENT LISTENERS ---
+
+        // Listen for main image upload
+        imageLoader.addEventListener('change', (e) => {
+            handleImageUpload(e.target.files[0], 'main');
+        });
+
+        // Listen for watermark image upload
+        watermarkLoader.addEventListener('change', (e) => {
+            handleImageUpload(e.target.files[0], 'watermark');
+        });
+        
+        // Listen for changes in controls and redraw
+        positionSelector.addEventListener('change', redrawCanvas);
+        opacitySlider.addEventListener('input', () => {
+            opacityValue.textContent = opacitySlider.value;
+            redrawCanvas();
+        });
+
+        // --- FUNCTIONS ---
+
+        /**
+         * Handles loading an image file, creating an Image object,
+         * and triggering the canvas redraw.
+         * @param {File} file - The image file from the input.
+         * @param {string} type - 'main' or 'watermark'.
+         */
+        function handleImageUpload(file, type) {
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    if (type === 'main') {
+                        mainImage = img;
+                    } else {
+                        watermarkImage = img;
+                    }
+                    redrawCanvas();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        /**
+         * Clears and redraws the canvas with the main image and watermark.
+         * This function is the core of the application.
+         */
+        function redrawCanvas() {
+            if (!mainImage) {
+                // If there's no main image, we can't do anything.
+                return;
+            }
+
+            // Set canvas dimensions to match the main image
+            canvas.width = mainImage.width;
+            canvas.height = mainImage.height;
+
+            // 1. Clear the canvas and draw the main image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(mainImage, 0, 0);
+
+            if (watermarkImage) {
+                // 2. Set the watermark opacity
+                const opacity = parseFloat(opacitySlider.value);
+                ctx.globalAlpha = opacity;
+
+                // 3. Calculate watermark position
+                const position = positionSelector.value;
+                const margin = 20; // 20px margin from the edges
+                let x = 0;
+                let y = 0;
+
+                // Determine X coordinate
+                if (position.includes('right')) {
+                    x = canvas.width - watermarkImage.width - margin;
+                } else if (position.includes('center')) {
+                    x = (canvas.width - watermarkImage.width) / 2;
+                } else { // 'left'
+                    x = margin;
+                }
+
+                // Determine Y coordinate
+                if (position.includes('bottom')) {
+                    y = canvas.height - watermarkImage.height - margin;
+                } else if (position.includes('middle')) {
+                    y = (canvas.height - watermarkImage.height) / 2;
+                } else { // 'top'
+                    y = margin;
+                }
+                
+                // Special case for 'center' (which doesn't contain middle)
+                if (position === 'center') {
+                    x = (canvas.width - watermarkImage.width) / 2;
+                    y = (canvas.height - watermarkImage.height) / 2;
+                }
+
+                // 4. Draw the watermark image
+                ctx.drawImage(watermarkImage, x, y);
+
+                // 5. Reset opacity for any future drawings
+                ctx.globalAlpha = 1.0;
+            }
+
+            // 6. Update the download link
+            updateDownloadLink();
+        }
+
+        /**
+         * Updates the download link with the current canvas content
+         * and makes it visible.
+         */
+        function updateDownloadLink() {
+            downloadLink.href = canvas.toDataURL('image/png'); // Use PNG to preserve transparency
+            downloadLink.style.display = 'block';
+        }
+
+    </script>
+</body>
+</html>
